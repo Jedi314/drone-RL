@@ -1,1 +1,1 @@
-# drone-RL
+# Quadcopter control based on deep reinforcement learning
