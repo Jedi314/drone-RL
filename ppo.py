@@ -86,6 +86,7 @@ class PPO:
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
+        self.lambda_gae = 1
 
         self.buffer = RolloutBuffer()
 
@@ -137,27 +138,61 @@ class PPO:
 
 
     def update(self):
-        # Monte Carlo estimate of returns
-        rewards = []
-        discounted_reward = 0
-        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
-            if is_terminal:
-                discounted_reward = 0
-            discounted_reward = reward + (self.gamma * discounted_reward)
-            rewards.insert(0, discounted_reward)
+        # rewards = []
+        # discounted_reward = 0
+        # for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+        #     if is_terminal:
+        #         discounted_reward = 0
+        #     discounted_reward = reward + (self.gamma * discounted_reward)
+        #     rewards.insert(0, discounted_reward)
 
-        # Normalizing the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+        # # Normalizing the rewards
+        # rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
         old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
+        rewards_raw = torch.tensor(self.buffer.rewards, dtype=torch.float32).to(device)
+        is_terminals = torch.tensor(self.buffer.is_terminals, dtype=torch.bool).to(device)
 
         # calculate advantages
-        advantages = rewards.detach() - old_state_values.detach() # compute A
+        # advantages = rewards.detach() - old_state_values.detach()
+        advantages = torch.zeros_like(rewards_raw).to(device)
+
+        last_advantage = 0
+        for t in reversed(range(len(rewards_raw))):
+            if t == len(rewards_raw) - 1:
+                next_state_value = 0.0
+            else:
+                next_state_value = old_state_values[t+1]
+
+            if is_terminals[t]:
+                next_state_value = 0.0
+                last_advantage = 0
+
+            # Вычисление временной разности (TD-ошибки): delta_t = r_t + gamma * V(s_t+1) - V(s_t)
+            delta_t = rewards_raw[t] + self.gamma * next_state_value - old_state_values[t]
+
+            # Вычисление преимущества GAE: A_t = delta_t + gamma * lambda * A_{t+1}
+            advantages[t] = delta_t + self.gamma * self.lambda_gae * last_advantage
+            last_advantage = advantages[t]
+
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-7)
+
+
+        # Расчет Monte Carlo returns для Value Function
+        returns = torch.zeros_like(rewards_raw).to(device)
+        discounted_return = 0
+        for t in reversed(range(len(rewards_raw))):
+            if is_terminals[t]:
+                discounted_return = 0
+            discounted_return = rewards_raw[t] + (self.gamma * discounted_return)
+            returns[t] = discounted_return
+
+        returns = (returns - returns.mean()) / (returns.std() + 1e-7)
 
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
