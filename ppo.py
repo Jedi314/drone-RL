@@ -138,17 +138,17 @@ class PPO:
 
 
     def update(self):
-        # rewards = []
-        # discounted_reward = 0
-        # for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
-        #     if is_terminal:
-        #         discounted_reward = 0
-        #     discounted_reward = reward + (self.gamma * discounted_reward)
-        #     rewards.insert(0, discounted_reward)
+        rewards = []
+        discounted_reward = 0
+        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = reward + (self.gamma * discounted_reward)
+            rewards.insert(0, discounted_reward)
 
-        # # Normalizing the rewards
-        # rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
-        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+        # Normalizing the rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
         old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
