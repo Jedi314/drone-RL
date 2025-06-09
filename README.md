@@ -24,3 +24,7 @@ For test:
 ```sh
 python3 test_racing.py
 ```
+
+**Result**
+
+![Demonstration](./video.gif)
